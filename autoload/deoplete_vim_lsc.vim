@@ -1,39 +1,44 @@
-let g:deoplete_vim_lsc#request = {
-      \   'context': {},
-      \   'responsed': v:false,
-      \   'response': []
-      \ }
+let g:deoplete_vim_lsc#clear_on_insert_leave = get(g:, 'deoplete_vim_lsc#clear_on_insert_leave', v:false)
+let g:deoplete_vim_lsc#request_cache_count = get(g:, 'deoplete_vim_lsc#request_cache_count', 5)
 
+let s:requests = []
 function! deoplete_vim_lsc#clear()
-  let g:deoplete_vim_lsc#request = {
-        \   'context': {},
-        \   'responsed': v:false,
-        \   'response': []
-        \ }
+  if g:deoplete_vim_lsc#clear_on_insert_leave
+    let s:requests = []
+  endif
 endfunction
 
 function! deoplete_vim_lsc#is_completable()
   for server in lsc#server#current()
-    return !empty(s:get(server, ['capabilities', 'completion'], v:null))
+    if !empty(s:get(server, ['capabilities', 'completion'], v:null))
+      return v:true
+    endif
   endfor
   return v:false
 endfunction
 
 function! deoplete_vim_lsc#is_completable_context(deoplete_context)
+  let output = v:false
   for server in lsc#server#current()
     let chars = s:get(server, ['capabilities', 'completion', 'triggerCharacters'], [])
     let chars = map(copy(chars), { k, v -> escape(v, '<.[]') }) + ['\w']
-    let output = match(a:deoplete_context.input, '^\_.\{-}\%(' . join(chars, '\|') . '\)$') >= 0
-    return output
+    let output = output || match(a:deoplete_context.input, '^\_.\{-}\%(' . join(chars, '\|') . '\)$') >= 0
+    if output
+      return v:true
+    endif
   endfor
   return v:false
 endfunction
 
-function! deoplete_vim_lsc#match_context(deoplete_context1, deoplete_context2)
-  if empty(a:deoplete_context1) || empty(a:deoplete_context2)
-    return v:false
-  endif
-  return a:deoplete_context1.input ==# a:deoplete_context2.input
+function! deoplete_vim_lsc#find_request(deoplete_context)
+  for request in s:requests
+    let input1 = substitute(a:deoplete_context.input, '\w\zs\w\+$', '', 'g')
+    let input2 = substitute(request.context.input, '\w\zs\w\+$', '', 'g')
+    if input1 ==# input2
+      return request
+    endif
+  endfor
+  return v:null
 endfunction
 
 function! deoplete_vim_lsc#request_completion(deoplete_context)
@@ -43,14 +48,19 @@ function! deoplete_vim_lsc#request_completion(deoplete_context)
   endif
 
   " skip request if match current context
-  if deoplete_vim_lsc#match_context(a:deoplete_context, g:deoplete_vim_lsc#request.context)
+  if !empty(deoplete_vim_lsc#find_request(a:deoplete_context))
     return
   endif
 
   " request completion
-  let g:deoplete_vim_lsc#request.context = a:deoplete_context
-  let g:deoplete_vim_lsc#request.responsed = v:false
-  let g:deoplete_vim_lsc#request.response = []
+  call add(s:requests, {
+        \   'context': a:deoplete_context,
+        \   'response': v:null
+        \ })
+  if len(s:requests) > g:deoplete_vim_lsc#request_cache_count
+    call remove(s:requests, 0, -g:deoplete_vim_lsc#request_cache_count - 1)
+  endif
+
   call lsc#file#flushChanges()
   call lsc#server#userCall('textDocument/completion',
         \ lsc#params#documentPosition(),
@@ -58,19 +68,15 @@ function! deoplete_vim_lsc#request_completion(deoplete_context)
 endfunction
 
 function! s:on_response(deoplete_context, response)
-  if !deoplete_vim_lsc#match_context(a:deoplete_context, g:deoplete_vim_lsc#request.context)
-    return
-  endif
-
   if empty(a:response)
     return
   endif
 
-  let g:deoplete_vim_lsc#request.context = a:deoplete_context
-  let g:deoplete_vim_lsc#request.responsed = v:true
-  let g:deoplete_vim_lsc#request.response = type(a:response) == v:t_list
-        \ ? a:response
-        \ : get(a:response, 'items', [])
+  let request = deoplete_vim_lsc#find_request(a:deoplete_context)
+  if empty(request)
+    return
+  endif
+  let request.response = type(a:response) == v:t_list ? a:response : get(a:response, 'items', [])
 
   if mode() ==# 'i'
     call deoplete#auto_complete()

@@ -45,10 +45,11 @@ class Source(Base):
             context['is_async'] = False
             return[]
 
-        if self.vim.call('deoplete_vim_lsc#match_context', context, self.vim.vars['deoplete_vim_lsc#request']['context']):
-            if self.vim.vars['deoplete_vim_lsc#request']['responsed']:
+        request = self.vim.call('deoplete_vim_lsc#find_request', context)
+        if request:
+            if request['response']:
                 context['is_async'] = False
-                return self.to_candidates(self.vim.vars['deoplete_vim_lsc#request']['response'])
+                return self.to_candidates(request['response'])
             return []
         else:
             context['is_async'] = True
