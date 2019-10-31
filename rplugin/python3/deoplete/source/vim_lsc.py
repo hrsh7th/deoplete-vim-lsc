@@ -45,7 +45,7 @@ class Source(Base):
             context['is_async'] = False
             return[]
 
-        request = self.vim.call('deoplete_vim_lsc#find_request', context)
+        request = self.vim.call('deoplete_vim_lsc#find_request', context['input'])
         if request:
             if request['response']:
                 context['is_async'] = False
@@ -53,13 +53,15 @@ class Source(Base):
             return []
         else:
             context['is_async'] = True
-            self.vim.call('deoplete_vim_lsc#request_completion', context)
+            self.vim.call('deoplete_vim_lsc#request_completion', context['input'])
         return []
 
     def to_candidates(self, items):
         candidates = [{
             'word': item['insertText'] if item.get('insertText', None) else item['label'],
             'abbr': item['insertText'] if item.get('insertText', None) else item['label'],
+            'menu': item['detail'] if item.get('detail', None) else item['label'],
+            'info': item['detail'] if item.get('detail', None) else item['label'],
             'kind': COMPLETION_ITEM_KIND[item['kind'] - 1]
         } for item in items]
         return candidates
