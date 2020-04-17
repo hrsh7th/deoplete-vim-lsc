@@ -62,7 +62,7 @@ class Source(Base):
             'abbr': item['insertText'] if item.get('insertText', None) else item['label'],
             'menu': item['detail'] if item.get('detail', None) else item['label'],
             'info': item['detail'] if item.get('detail', None) else item['label'],
-            'kind': COMPLETION_ITEM_KIND[item['kind'] - 1]
+            'kind': COMPLETION_ITEM_KIND[item.get('kind', 1) - 1]
         } for item in items]
         return candidates
 
